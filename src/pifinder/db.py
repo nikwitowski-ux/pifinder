@@ -225,6 +225,48 @@ def upsert_attorney(conn: sqlite3.Connection, firm_id: int, attorney: dict[str, 
     )
 
 
+def upsert_score(
+    conn: sqlite3.Connection,
+    *,
+    firm_id: int,
+    score: int,
+    bucket: str,
+    components: list[dict[str, Any]],
+    computed_at: str | None = None,
+) -> None:
+    """Insert-or-replace the score row for a firm."""
+    conn.execute(
+        """
+        INSERT INTO scores (firm_id, score, bucket, components_json, computed_at)
+        VALUES (:firm_id, :score, :bucket, :components_json, COALESCE(:computed_at, datetime('now')))
+        ON CONFLICT(firm_id) DO UPDATE SET
+          score           = excluded.score,
+          bucket          = excluded.bucket,
+          components_json = excluded.components_json,
+          computed_at     = excluded.computed_at
+        """,
+        {
+            "firm_id": firm_id,
+            "score": score,
+            "bucket": bucket,
+            "components_json": json.dumps(components),
+            "computed_at": computed_at,
+        },
+    )
+
+
+def firms_needing_score(conn: sqlite3.Connection, *, recompute: bool = False) -> list[dict[str, Any]]:
+    """Firms to score. If recompute=False, skip firms that already have a score row."""
+    if recompute:
+        rows = conn.execute("SELECT * FROM firms ORDER BY id").fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT f.* FROM firms f LEFT JOIN scores s ON s.firm_id = f.id "
+            "WHERE s.firm_id IS NULL ORDER BY f.id"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def insert_signal(conn: sqlite3.Connection, signal: dict[str, Any]) -> None:
     payload = {
         "firm_id": signal["firm_id"],

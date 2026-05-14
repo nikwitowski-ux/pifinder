@@ -24,6 +24,18 @@ Rolling task log. Each session: tick off what shipped, add what's next, write an
 - [x] CLI `enrich --firm-id N | --all [--limit N]` with soft-fail per firm
 - [x] Tests: parser (9), aggregator (6), persistence round-trip (4)
 
+## Done (v0.4 scoring engine)
+
+- [x] Aggregation-focused weight set in `config.yaml` (max 100, no buying-intent components yet)
+- [x] Pure scoring engine (`scoring.py`): `ScoringInputs` + 8 component evaluators + `score()` orchestrator. No I/O.
+- [x] Each component takes `now` from inputs so tests are deterministic
+- [x] Mutually exclusive review tiers (high ≥100 vs moderate 50–99) enforced + tested
+- [x] Weight keys without an evaluator are silently dropped — config can lead implementation
+- [x] DB: `upsert_score` (idempotent), `firms_needing_score` (skips already-scored unless --recompute)
+- [x] CLI: `pifinder score --firm-id N | --all [--recompute]`
+- [x] Tests: 26 unit tests on the pure engine + 3 persistence tests = 29 new
+- [x] Verified live: scored 6 seeded firms, dashboard pins/grid/detail-page all reflect new scores correctly
+
 ## Done (v0.3 dashboard)
 
 - [x] FastAPI app + routes (`/`, `/firm/{id}`, `/api/firms`, `/api/firms/{id}`, `/api/export.csv`, `/healthz`)

@@ -4,6 +4,32 @@ Append-only. New entries on top.
 
 ---
 
+## 2026-05-14 — Scoring engine: weight keys can lead implementation
+
+`scoring.score()` silently ignores weight keys in `config.yaml` that have no
+matching evaluator in `COMPONENT_EVALUATORS`. This means we can land
+`meta_ads_running: 25` in config the moment we start working on the Meta Ads
+source — no scoring code changes until the evaluator function is added. The
+test `test_unknown_weight_keys_in_config_are_ignored_not_fatal` locks this
+contract.
+
+**Why it matters:** future enrichers can be enabled gradually without
+breaking active scoring runs.
+
+---
+
+## 2026-05-14 — `last_website_post_at` lives on the firm, not derived from signals
+
+The scoring engine reads `last_website_post_at` directly from the firm row.
+When I seeded test firms by inserting a `signal` with `observed_at` but
+*not* updating the firm's column, `recent_activity` didn't fire — the
+scorer was correct; the seed was incomplete. Real enrichment writes both,
+via `apply_firm_patch(... last_website_post_at=...)`. Worth remembering when
+hand-crafting test data: signals are observations; firm columns are
+materialized state, and the scorer reads materialized state only.
+
+---
+
 ## 2026-05-14 — Starlette 1.0 `TemplateResponse` signature: request is positional, not a context key
 
 We bundled `starlette==1.0.0` (via FastAPI). In 1.0, `Jinja2Templates.TemplateResponse` requires `request` as the first positional arg; passing `request` inside the context dict makes Jinja2 try to use the context as the cache key, which fails with `TypeError: unhashable type: 'dict'` on the second render attempt. Fixed by switching every call site to `TEMPLATES.TemplateResponse(request, "name.html", {…})`.

@@ -8,10 +8,18 @@ from typing import Annotated, Any
 import typer
 from loguru import logger
 
+from datetime import datetime, timezone
+
 from . import db as db_module
-from .config import get_discovery_defaults, get_settings
+from .config import (
+    get_discovery_defaults,
+    get_score_buckets,
+    get_scoring_weights,
+    get_settings,
+)
 from .logging_setup import init_logging
 from .models import EnrichmentResult, FirmRecord, SourceName
+from .scoring import ScoringInputs, score as score_firm
 from .sources.firm_website import FirmWebsiteScraper
 from .sources.google_places import GooglePlacesError, GooglePlacesSource
 
@@ -180,6 +188,90 @@ def dbinit() -> None:
     conn = db_module.connect(settings.db_path)
     db_module.migrate(conn)
     typer.echo(f"DB ready at {settings.db_path}")
+
+
+@app.command()
+def score(
+    firm_id: Annotated[int | None, typer.Option("--firm-id", help="Score a single firm")] = None,
+    all_: Annotated[bool, typer.Option("--all", help="Score every firm")] = False,
+    recompute: Annotated[bool, typer.Option("--recompute", help="Re-score already-scored firms")] = False,
+) -> None:
+    """Compute the lead score for firms and persist into the scores table."""
+    if not firm_id and not all_:
+        typer.echo("error: pass --firm-id N or --all", err=True)
+        raise typer.Exit(code=2)
+    _run_score(firm_id=firm_id, all_=all_, recompute=recompute)
+
+
+def _run_score(*, firm_id: int | None, all_: bool, recompute: bool) -> None:
+    settings = get_settings()
+    conn = db_module.connect(settings.db_path)
+    db_module.migrate(conn)
+
+    if firm_id is not None:
+        row = db_module.fetch_firm(conn, firm_id)
+        if row is None:
+            typer.echo(f"error: firm {firm_id} not found", err=True)
+            raise typer.Exit(code=2)
+        rows = [row]
+    else:
+        rows = db_module.firms_needing_score(conn, recompute=recompute)
+
+    if not rows:
+        typer.echo("nothing to score (use --recompute to rescore everyone)")
+        return
+
+    weights = get_scoring_weights()
+    buckets = get_score_buckets()
+    now = datetime.now(timezone.utc)
+
+    with db_module.transaction(conn):
+        for row in rows:
+            inputs = _row_to_scoring_inputs(row, now=now)
+            breakdown = score_firm(inputs, weights, buckets)
+            db_module.upsert_score(
+                conn,
+                firm_id=breakdown.firm_id,
+                score=breakdown.score,
+                bucket=breakdown.bucket,
+                components=[
+                    {"key": c.key, "weight": c.weight, "triggered": c.triggered, "note": c.note}
+                    for c in breakdown.components
+                ],
+                computed_at=breakdown.computed_at.isoformat(),
+            )
+            logger.info(
+                "score firm {} -> {} ({})",
+                breakdown.firm_id, breakdown.score, breakdown.bucket,
+            )
+    typer.echo(f"scored {len(rows)} firm(s)")
+
+
+def _row_to_scoring_inputs(row: dict[str, Any], *, now: datetime) -> ScoringInputs:
+    raw_post = row.get("last_website_post_at")
+    last_post: datetime | None
+    if raw_post:
+        try:
+            last_post = datetime.fromisoformat(raw_post)
+            if last_post.tzinfo is None:
+                last_post = last_post.replace(tzinfo=timezone.utc)
+        except (TypeError, ValueError):
+            last_post = None
+    else:
+        last_post = None
+
+    has_pi = row.get("has_pi_practice_page")
+    return ScoringInputs(
+        firm_id=row["id"],
+        rating=row.get("rating"),
+        user_ratings_total=row.get("user_ratings_total"),
+        has_pi_practice_page=bool(has_pi) if has_pi is not None else None,
+        attorney_count=row.get("attorney_count"),
+        last_website_post_at=last_post,
+        established_year=row.get("established_year"),
+        website=row.get("website") or None,
+        now=now,
+    )
 
 
 @app.command()

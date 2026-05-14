@@ -1,18 +1,25 @@
 # Scoring weights — see scoring.py. Tunable without code changes.
+# Aggregation-focused: every weight here is derivable from Places + firm-website
+# enrichment. Buying-intent signals (Meta ads, news) will be added later when
+# those sources land — adding a new weight key + a component evaluator is the
+# full diff. Max possible score = 100 (with high_review_volume firing).
 scoring:
   weights:
-    meta_ads_running: 25
-    reviews_50_plus: 15
-    recent_news_90d: 20
-    has_pi_practice_page: 10
-    multi_attorney_5_plus: 15
-    recent_website_activity_60d: 10
-    established_5_plus_years: 5
-  # Buckets surfaced in the dashboard map pin colors.
+    high_review_volume: 30          # >= 100 google reviews
+    moderate_review_volume: 15      # 50-99 reviews (mutually exclusive w/ high)
+    quality_rating: 20              # rating >= 4.5
+    multi_attorney: 15              # firm-website enrichment found 5+ attorneys
+    pi_specialized: 10              # has dedicated PI practice page
+    recent_activity: 10             # blog/news post within the last 60 days
+    established: 10                 # >= 5 years old per "established YYYY" text
+    has_website: 5                  # any website at all
+  # Buckets surfaced in the dashboard pin colors (cold / warm / hot).
   buckets:
     red_max: 39
     yellow_max: 69
-    # >= 70 is green
+    # >= 70 is hot
+  recent_activity_window_days: 60
+  established_min_years: 5
 
 discovery:
   default_query: "personal injury law firm"
