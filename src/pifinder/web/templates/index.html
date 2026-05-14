@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}pifinder · map{% endblock %}
+{% block page_id %}index{% endblock %}
+
+{% block masthead_right %}
+  <span class="stat"><span class="stat-num">{{ stats.firms }}</span> firms</span>
+  <span class="stat"><span class="stat-num">{{ stats.enriched }}</span> enriched</span>
+  <span class="stat"><span class="stat-num">{{ stats.scored }}</span> scored</span>
+{% endblock %}
+
+{% block body %}
+<section class="filter-bar" aria-label="filters">
+  <div class="filter-grp">
+    <label for="f-q" class="filter-label">Search</label>
+    <input id="f-q" type="search" class="filter-input" placeholder="firm name…" autocomplete="off">
+  </div>
+  <div class="filter-grp">
+    <label for="f-score" class="filter-label">Min score</label>
+    <input id="f-score" type="range" min="0" max="100" step="5" value="0">
+    <span id="f-score-out" class="filter-value">0</span>
+  </div>
+  <div class="filter-grp toggle-grp">
+    <label class="toggle">
+      <input id="f-website" type="checkbox" checked>
+      <span class="toggle-pill"></span>
+      <span class="toggle-text">has website</span>
+    </label>
+    <label class="toggle">
+      <input id="f-enriched" type="checkbox">
+      <span class="toggle-pill"></span>
+      <span class="toggle-text">enriched only</span>
+    </label>
+  </div>
+  <div class="filter-grp right">
+    <button id="btn-export" class="btn btn-ghost" title="export filtered set as CSV">
+      <span class="btn-glyph">↓</span> export csv
+    </button>
+    <button id="btn-reset" class="btn btn-ghost" title="reset filters">reset</button>
+  </div>
+</section>
+
+<main class="split">
+  <section class="pane pane-map" aria-label="map">
+    <div id="map" role="application" aria-roledescription="firm locations on a map"></div>
+    <div class="legend" aria-hidden="true">
+      <span class="legend-title">score</span>
+      <span class="dot dot-hot"></span><span class="legend-tick">≥{{ buckets.yellow_max + 1 }}</span>
+      <span class="dot dot-warm"></span><span class="legend-tick">{{ buckets.red_max + 1 }}–{{ buckets.yellow_max }}</span>
+      <span class="dot dot-cold"></span><span class="legend-tick">≤{{ buckets.red_max }}</span>
+      <span class="dot dot-unscored"></span><span class="legend-tick">unscored</span>
+    </div>
+  </section>
+  <section class="pane pane-grid" aria-label="grid">
+    <div class="grid-header">
+      <h2 class="pane-title">Firms</h2>
+      <span id="grid-count" class="pane-count">0</span>
+    </div>
+    <div id="grid"></div>
+  </section>
+</main>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+  window.PIFINDER_BUCKETS = {{ buckets | tojson }};
+</script>
+<script src="/static/app.js"></script>
+{% endblock %}

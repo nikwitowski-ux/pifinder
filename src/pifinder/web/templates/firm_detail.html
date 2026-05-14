@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}{{ firm.name }} · pifinder{% endblock %}
+{% block page_id %}firm{% endblock %}
+
+{% block masthead_right %}
+  <a class="back-link" href="/">← all firms</a>
+{% endblock %}
+
+{% block body %}
+<article class="firm">
+  <header class="firm-head">
+    <div class="firm-title">
+      <h1 class="firm-name">{{ firm.name }}</h1>
+      {% if firm.city %}<p class="firm-loc">{{ firm.address or "" }}</p>{% endif %}
+    </div>
+    <aside class="firm-score-card">
+      <div class="score-bucket score-{{ firm.bucket }}">
+        <span class="score-num">{{ firm.score if firm.score is not none else '—' }}</span>
+        <span class="score-label">{{ firm.bucket }}</span>
+      </div>
+      <dl class="firm-quick">
+        <dt>Rating</dt><dd>{{ '%.1f'|format(firm.rating) if firm.rating else '—' }} <span class="dim">({{ firm.user_ratings_total or 0 }})</span></dd>
+        <dt>Phone</dt><dd>{% if firm.phone %}<a href="tel:{{ firm.phone }}">{{ firm.phone }}</a>{% else %}—{% endif %}</dd>
+        <dt>Website</dt><dd>{% if firm.website %}<a href="{{ firm.website }}" target="_blank" rel="noopener">{{ firm.website }}</a>{% else %}—{% endif %}</dd>
+        <dt>Attorneys</dt><dd>{{ firm.attorney_count if firm.attorney_count is not none else '—' }}</dd>
+        <dt>Established</dt><dd>{{ firm.established_year or '—' }}</dd>
+      </dl>
+    </aside>
+  </header>
+
+  <section class="firm-section">
+    <h2 class="section-h">Attorneys</h2>
+    {% if firm.attorneys %}
+      <ul class="attorney-grid">
+        {% for a in firm.attorneys %}
+          <li class="attorney-card">
+            <div class="attorney-name">
+              {% if a.bio_url %}<a href="{{ a.bio_url }}" target="_blank" rel="noopener">{{ a.name }}</a>
+              {% else %}{{ a.name }}{% endif %}
+            </div>
+            <div class="attorney-title">{{ a.title or 'Attorney' }}</div>
+            {% if a.practice_areas %}
+              <ul class="tag-row">
+                {% for p in a.practice_areas %}<li class="tag">{{ p }}</li>{% endfor %}
+              </ul>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="empty">No attorneys parsed yet. Run <code>pifinder enrich --firm-id {{ firm.id }}</code>.</p>
+    {% endif %}
+  </section>
+
+  <section class="firm-section">
+    <h2 class="section-h">Signals</h2>
+    {% if firm.signals %}
+      <table class="signals-table">
+        <thead><tr><th>kind</th><th>source</th><th>observed</th><th>summary</th></tr></thead>
+        <tbody>
+          {% for s in firm.signals %}
+            <tr>
+              <td class="mono">{{ s.kind }}</td>
+              <td class="mono dim">{{ s.source }}</td>
+              <td class="mono dim">{{ s.observed_at[:10] if s.observed_at else '' }}</td>
+              <td>{{ s.summary }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="empty">No signals collected yet.</p>
+    {% endif %}
+  </section>
+
+  <section class="firm-section">
+    <h2 class="section-h">Raw data</h2>
+    <details class="raw">
+      <summary>show fields</summary>
+      <pre class="raw-pre">{{ firm | tojson(indent=2) }}</pre>
+    </details>
+  </section>
+</article>
+{% endblock %}

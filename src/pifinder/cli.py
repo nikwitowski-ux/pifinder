@@ -183,6 +183,28 @@ def dbinit() -> None:
 
 
 @app.command()
+def dashboard(
+    host: Annotated[str, typer.Option("--host")] = "127.0.0.1",
+    port: Annotated[int, typer.Option("--port")] = 8000,
+    reload_: Annotated[bool, typer.Option("--reload", help="autoreload on file change (dev)")] = False,
+) -> None:
+    """Run the dashboard at http://HOST:PORT."""
+    import uvicorn
+
+    settings = get_settings()
+    conn = db_module.connect(settings.db_path)
+    db_module.migrate(conn)
+    typer.echo(f"pifinder dashboard → http://{host}:{port}")
+    uvicorn.run(
+        "pifinder.web.app:app",
+        host=host,
+        port=port,
+        reload=reload_,
+        log_level="info",
+    )
+
+
+@app.command()
 def info() -> None:
     """Show basic config / DB stats."""
     settings = get_settings()

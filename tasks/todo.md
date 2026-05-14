@@ -24,9 +24,32 @@ Rolling task log. Each session: tick off what shipped, add what's next, write an
 - [x] CLI `enrich --firm-id N | --all [--limit N]` with soft-fail per firm
 - [x] Tests: parser (9), aggregator (6), persistence round-trip (4)
 
-## Next (build order from the master prompt)
+## Done (v0.3 dashboard)
 
-- [ ] Meta Ad Library source (`sources/meta_ads.py`) — official API, search by page name → is_running_ads + active_ad_count + ad_themes + regions
+- [x] FastAPI app + routes (`/`, `/firm/{id}`, `/api/firms`, `/api/firms/{id}`, `/api/export.csv`, `/healthz`)
+- [x] Templates: base / index / firm_detail (Jinja2; Leaflet 1.9 + markercluster + Tabulator 6 via CDN)
+- [x] Design system: paper / ink / signal-orange. Fraunces (display) + Manrope (body) + IBM Plex Mono (data)
+- [x] Map / grid bidirectional sync (row click → fly + popup; pin click → scroll + highlight)
+- [x] Filters: search, min-score, has-website, enriched-only — server-side query params
+- [x] CSV export of filtered set
+- [x] CLI `pifinder dashboard --host --port [--reload]`
+- [x] API smoke + filter tests via httpx.ASGITransport (7 new)
+- [x] Visual verification: seeded 6 firms, captured screenshots of index + detail
+
+## Aggregation-focus pivot (decided 2026-05-14)
+
+Deferring buying-signal depth (Meta Ads / news scoring) until base aggregation
+is operationally useful. Tool's value right now is being a clean aggregator
+across Places + firm-website data.
+
+## Next
+
+- [ ] Real-API smoke test: live `discover` against a real `GOOGLE_PLACES_API_KEY` for a small Irvine radius. Verify the dashboard against actual data, not synthetic.
+- [ ] xlsx export with conditional formatting on `score`
+- [ ] Avvo / Justia directory scrapers (only if Places coverage proves insufficient on first real run)
+- [ ] Street View embed on firm detail page (needs `GOOGLE_MAPS_EMBED_API_KEY`)
+- [ ] Territory drawing (Leaflet.draw polygon/radius)
+- [ ] (later) Meta Ad Library, news signals, scoring engine — when intent buying becomes the focus
 - [ ] News signals (`sources/news.py`) — Google News RSS keywords (verdict / settlement / hires / expands) past 90d
 - [ ] Avvo / Justia fallback (`sources/directories.py`) — Playwright with realistic timing
 - [ ] Scoring engine (`scoring.py`) with weights from `config.yaml`; tests for each component

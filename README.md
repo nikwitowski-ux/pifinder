@@ -19,7 +19,20 @@ uv run playwright install chromium   # one-time, ~150MB download for the scraper
 cp .env.example .env                  # fill in GOOGLE_PLACES_API_KEY
 uv run pifinder discover --location "Orange County, CA" --radius 25 --output firms.csv
 uv run pifinder enrich --all --limit 5
+uv run pifinder dashboard              # http://127.0.0.1:8000
 ```
+
+## Dashboard
+
+Editorial split-pane: Leaflet map (OSM tiles, desaturated) on the left,
+Tabulator grid on the right. Filter bar at the top (search, min-score slider,
+has-website + enriched-only toggles, CSV export). Click a row to fly the map
+to that firm and open its popup; click a pin to highlight and scroll the
+matching row. Each firm has a `/firm/{id}` detail page with attorneys,
+signals, and raw fields.
+
+Day-one usable on just Places API data — `attorney_count`, signals, and
+scores show `—` until `enrich` runs.
 
 ## CLI
 

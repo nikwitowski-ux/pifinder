@@ -4,6 +4,14 @@ Append-only. New entries on top.
 
 ---
 
+## 2026-05-14 — Starlette 1.0 `TemplateResponse` signature: request is positional, not a context key
+
+We bundled `starlette==1.0.0` (via FastAPI). In 1.0, `Jinja2Templates.TemplateResponse` requires `request` as the first positional arg; passing `request` inside the context dict makes Jinja2 try to use the context as the cache key, which fails with `TypeError: unhashable type: 'dict'` on the second render attempt. Fixed by switching every call site to `TEMPLATES.TemplateResponse(request, "name.html", {…})`.
+
+**Why it matters:** templated routes appeared to "work" on first request and crashed on the second, only caught by an end-to-end test that hit `/` twice. Worth keeping the dashboard tests covering both new and repeated renders.
+
+---
+
 ## 2026-05-14 — Heuristic attorney scan: scope title search to next sibling only
 
 First cut of `_find_title_near` walked `hdr.parent.get_text(...)` which on a page with multiple bio cards meant any heading that loosely matched `_NAME_RE` (like "About Us") pulled in title hints from far-away cards and got mis-classified as an attorney. Scoping to `hdr.find_next_sibling()` only is enough for the common bio-card pattern (`<hN>Name</hN><p>Title…</p>`) and eliminates the cross-card leakage.
