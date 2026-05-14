@@ -1,0 +1,37 @@
+# Scoring weights — see scoring.py. Tunable without code changes.
+scoring:
+  weights:
+    meta_ads_running: 25
+    reviews_50_plus: 15
+    recent_news_90d: 20
+    has_pi_practice_page: 10
+    multi_attorney_5_plus: 15
+    recent_website_activity_60d: 10
+    established_5_plus_years: 5
+  # Buckets surfaced in the dashboard map pin colors.
+  buckets:
+    red_max: 39
+    yellow_max: 69
+    # >= 70 is green
+
+discovery:
+  default_query: "personal injury law firm"
+  default_radius_meters: 40000   # ~25 mi
+  places_page_size: 20
+
+http:
+  per_host_rps: 1.0              # be polite
+  retries: 3
+  backoff_base_s: 1.5
+
+scraping:
+  firm_website:
+    max_pages: 10
+    delay_s: 2.0
+    candidate_paths:
+      - /attorneys
+      - /our-team
+      - /lawyers
+      - /about
+      - /attorney-profiles
+      - /our-attorneys
