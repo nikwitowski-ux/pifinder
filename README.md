@@ -15,8 +15,10 @@ PI law firm lead-gen + buying-signal intelligence. Given a geography, returns ra
 
 ```bash
 uv sync
-cp .env.example .env  # fill in GOOGLE_PLACES_API_KEY
+uv run playwright install chromium   # one-time, ~150MB download for the scraper
+cp .env.example .env                  # fill in GOOGLE_PLACES_API_KEY
 uv run pifinder discover --location "Orange County, CA" --radius 25 --output firms.csv
+uv run pifinder enrich --all --limit 5
 ```
 
 ## CLI

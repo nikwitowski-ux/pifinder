@@ -16,9 +16,16 @@ Rolling task log. Each session: tick off what shipped, add what's next, write an
 - [x] Pagination test (multi-page nextPageToken)
 - [x] Normalizer unit test (handles "P.C.", "LLP", "PLLC", "The Law Offices of", casing)
 
+## Done (v0.2 firm-website enrichment)
+
+- [x] Pure HTML parser (`sources/_html_parser.py`) — JSON-LD attorneys + heuristic cards, practice areas, post dates, established year, same-origin link discovery
+- [x] Playwright scraper (`sources/firm_website.py`) — robots.txt enforcement, max_pages + per-host delay, candidate-path planning (`/attorneys`, `/our-team`, `/blog`, …), aggregator that rolls up multiple pages
+- [x] DB helpers: `apply_firm_patch` (whitelist of patchable columns), `upsert_attorney` (idempotent on firm_id+name), `insert_signal`
+- [x] CLI `enrich --firm-id N | --all [--limit N]` with soft-fail per firm
+- [x] Tests: parser (9), aggregator (6), persistence round-trip (4)
+
 ## Next (build order from the master prompt)
 
-- [ ] Firm-website scraper (`sources/firm_website.py`) using Playwright; politeness rules (robots.txt + 2s delay); extract attorneys, practice areas, recent posts
 - [ ] Meta Ad Library source (`sources/meta_ads.py`) — official API, search by page name → is_running_ads + active_ad_count + ad_themes + regions
 - [ ] News signals (`sources/news.py`) — Google News RSS keywords (verdict / settlement / hires / expands) past 90d
 - [ ] Avvo / Justia fallback (`sources/directories.py`) — Playwright with realistic timing

@@ -154,6 +154,93 @@ def upsert_firm(conn: sqlite3.Connection, firm: FirmRecord) -> int:
         return firm_id
 
 
+def fetch_firm(conn: sqlite3.Connection, firm_id: int) -> dict[str, Any] | None:
+    row = conn.execute("SELECT * FROM firms WHERE id = ?", (firm_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def fetch_firms_with_website(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        "SELECT * FROM firms WHERE website IS NOT NULL AND website != '' ORDER BY id"
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+# Columns that an enrichment patch is allowed to write. Keeps the surface tight.
+_PATCHABLE_FIRM_COLUMNS = frozenset({
+    "attorney_count", "has_pi_practice_page", "last_website_post_at",
+    "established_year", "phone", "email", "rating", "user_ratings_total",
+    "business_status", "latitude", "longitude",
+})
+
+
+def apply_firm_patch(conn: sqlite3.Connection, firm_id: int, patch: dict[str, Any]) -> None:
+    """Apply a partial update from an EnrichmentResult.patch. Unknown / private keys are ignored."""
+    cleaned: dict[str, Any] = {}
+    for k, v in patch.items():
+        if k not in _PATCHABLE_FIRM_COLUMNS:
+            continue
+        if isinstance(v, bool):
+            cleaned[k] = int(v)
+        elif hasattr(v, "isoformat"):
+            cleaned[k] = v.isoformat()
+        else:
+            cleaned[k] = v
+    if not cleaned:
+        return
+    set_clause = ", ".join(f"{c} = :{c}" for c in cleaned)
+    conn.execute(
+        f"UPDATE firms SET {set_clause}, last_seen_at = datetime('now') WHERE id = :id",
+        {**cleaned, "id": firm_id},
+    )
+
+
+def upsert_attorney(conn: sqlite3.Connection, firm_id: int, attorney: dict[str, Any]) -> None:
+    """Insert or update an attorney row keyed on (firm_id, name)."""
+    payload = {
+        "firm_id": firm_id,
+        "name": attorney["name"],
+        "title": attorney.get("title"),
+        "practice_areas": json.dumps(attorney.get("practice_areas") or []),
+        "bio_url": attorney.get("bio_url"),
+        "years_practicing": attorney.get("years_practicing"),
+        "bar_admissions": json.dumps(attorney.get("bar_admissions") or []),
+        "source": attorney.get("source", "firm_website"),
+    }
+    conn.execute(
+        """
+        INSERT INTO attorneys (firm_id, name, title, practice_areas, bio_url,
+                               years_practicing, bar_admissions, source)
+        VALUES (:firm_id, :name, :title, :practice_areas, :bio_url,
+                :years_practicing, :bar_admissions, :source)
+        ON CONFLICT(firm_id, name) DO UPDATE SET
+          title           = COALESCE(excluded.title, attorneys.title),
+          practice_areas  = excluded.practice_areas,
+          bio_url         = COALESCE(excluded.bio_url, attorneys.bio_url),
+          years_practicing= COALESCE(excluded.years_practicing, attorneys.years_practicing),
+          bar_admissions  = excluded.bar_admissions,
+          source          = excluded.source
+        """,
+        payload,
+    )
+
+
+def insert_signal(conn: sqlite3.Connection, signal: dict[str, Any]) -> None:
+    payload = {
+        "firm_id": signal["firm_id"],
+        "kind": signal["kind"],
+        "source": signal["source"],
+        "observed_at": signal["observed_at"],
+        "summary": signal["summary"],
+        "payload_json": json.dumps(signal.get("payload") or {}, default=str),
+    }
+    conn.execute(
+        "INSERT INTO signals (firm_id, kind, source, observed_at, summary, payload_json) "
+        "VALUES (:firm_id, :kind, :source, :observed_at, :summary, :payload_json)",
+        payload,
+    )
+
+
 def insert_run(
     conn: sqlite3.Connection, *, location: str, radius_meters: int, query: str
 ) -> int:

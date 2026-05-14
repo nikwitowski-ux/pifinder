@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import csv
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
 from loguru import logger
@@ -11,7 +11,8 @@ from loguru import logger
 from . import db as db_module
 from .config import get_discovery_defaults, get_settings
 from .logging_setup import init_logging
-from .models import FirmRecord
+from .models import EnrichmentResult, FirmRecord, SourceName
+from .sources.firm_website import FirmWebsiteScraper
 from .sources.google_places import GooglePlacesError, GooglePlacesSource
 
 app = typer.Typer(no_args_is_help=True, add_completion=False, help="PI firm lead-gen.")
@@ -66,6 +67,110 @@ async def _run_discover(*, location: str, radius_meters: int, query: str) -> lis
     db_module.finish_run(conn, run_id, firm_count=len(firms))
     logger.info("run #{} stored {} firms", run_id, len(firms))
     return firms
+
+
+@app.command()
+def enrich(
+    firm_id: Annotated[int | None, typer.Option("--firm-id", help="Enrich a single firm by id")] = None,
+    all_: Annotated[bool, typer.Option("--all", help="Enrich every firm with a website")] = False,
+    limit: Annotated[int | None, typer.Option("--limit", help="Cap when using --all")] = None,
+) -> None:
+    """Run enrichment sources (firm-website scraper) against existing firms."""
+    if not firm_id and not all_:
+        typer.echo("error: pass --firm-id N or --all", err=True)
+        raise typer.Exit(code=2)
+
+    settings = get_settings()
+    conn = db_module.connect(settings.db_path)
+    db_module.migrate(conn)
+
+    if firm_id is not None:
+        row = db_module.fetch_firm(conn, firm_id)
+        if row is None:
+            typer.echo(f"error: firm {firm_id} not found", err=True)
+            raise typer.Exit(code=2)
+        firms_rows = [row]
+    else:
+        firms_rows = db_module.fetch_firms_with_website(conn)
+        if limit:
+            firms_rows = firms_rows[:limit]
+
+    typer.echo(f"Enriching {len(firms_rows)} firm(s)...")
+    asyncio.run(_run_enrich(firms_rows))
+
+
+async def _run_enrich(firm_rows: list[dict[str, Any]]) -> None:
+    settings = get_settings()
+    conn = db_module.connect(settings.db_path)
+    db_module.migrate(conn)
+
+    async with FirmWebsiteScraper() as scraper:
+        for row in firm_rows:
+            firm = _row_to_firm(row)
+            if not firm.website:
+                logger.info("skip firm {}: no website", firm.id)
+                continue
+            logger.info("enrich firm {} {}", firm.id, firm.name)
+            try:
+                result = await scraper.enrich(firm)
+            except Exception as e:                                # noqa: BLE001
+                logger.error("enrich failed for firm {}: {}", firm.id, e)
+                continue
+            _persist_enrichment(conn, firm, result)
+
+
+def _row_to_firm(row: dict[str, Any]) -> FirmRecord:
+    """Lossy reverse of upsert_firm — enough to drive enrichment."""
+    return FirmRecord(
+        id=row["id"],
+        place_id=row.get("place_id"),
+        name=row["name"],
+        normalized_name=row["normalized_name"],
+        address=row.get("address"),
+        city=row.get("city"),
+        state=row.get("state"),
+        postal_code=row.get("postal_code"),
+        country=row.get("country"),
+        latitude=row.get("latitude"),
+        longitude=row.get("longitude"),
+        phone=row.get("phone"),
+        website=row.get("website") or None,
+        email=row.get("email"),
+        rating=row.get("rating"),
+        user_ratings_total=row.get("user_ratings_total"),
+        business_status=row.get("business_status"),
+        discovered_via=SourceName(row.get("discovered_via", "google_places")),
+    )
+
+
+def _persist_enrichment(conn, firm: FirmRecord, result: EnrichmentResult) -> None:
+    if result.errors:
+        logger.warning("firm {} errors: {}", firm.id, result.errors)
+
+    patch = dict(result.patch)
+    attorneys = patch.pop("_attorneys", [])
+
+    with db_module.transaction(conn):
+        if patch:
+            db_module.apply_firm_patch(conn, firm.id, patch)
+        for a in attorneys:
+            db_module.upsert_attorney(conn, firm.id, a)
+        for sig in result.signals:
+            db_module.insert_signal(
+                conn,
+                {
+                    "firm_id": sig.firm_id,
+                    "kind": sig.kind.value,
+                    "source": sig.source.value,
+                    "observed_at": sig.observed_at.isoformat(),
+                    "summary": sig.summary,
+                    "payload": sig.payload,
+                },
+            )
+    logger.info(
+        "firm {} -> patched {}, attorneys={}, signals={}",
+        firm.id, list(patch.keys()), len(attorneys), len(result.signals),
+    )
 
 
 @app.command(name="dbinit")
