@@ -4,6 +4,42 @@ Append-only. New entries on top.
 
 ---
 
+## 2026-05-14 — Attorney heuristic: every candidate now requires a title hint + stoplist + all-caps reject
+
+Real-world enrichment (TORKLAW, DK Law, etc.) exposed two leak classes the
+original heuristic missed:
+
+1. **3-token marketing copy**: "Who We Are", "Practice Areas", "Free Case Evaluation", "Christmas Gift Giveaway". The earlier "3+ tokens skips the title-hint requirement" bypass let any title-cased 3-word phrase through.
+2. **All-caps brand fragments**: "TORKLAW Action Center", "FOO Holdings Group". The regex `[a-zA-Z]+` happily matches ALL-CAPS tokens.
+
+**Three layers of defense, all required:**
+1. `_NAME_STOPWORDS` — frozenset of ~120 tokens that never appear in human names (pronouns, articles, "lawyers", "free", "consultation", "injury", "law", etc.). Any candidate containing one of these tokens is rejected.
+2. `_has_uppercase_brand_token` — any token >2 chars that is fully uppercase is a firm/brand marker. Middle initials ("A.") are still fine because the length check is >2.
+3. **All candidates now require a confirming title hint** in the immediate next sibling (Partner / Attorney / Associate / Of Counsel etc.). The old "3+ token bypass" is gone. JSON-LD attorneys are unaffected — that path is structured-data-driven.
+
+**Why precision > recall here:** the dashboard shows a "PI" column and surfaces firms by attorney count. A handful of fake attorneys per firm corrupts the lead-quality signal far more than missing one real attorney on a poorly-marked-up bio page does.
+
+**Validated against real data**: re-ran enrichment on 10 Irvine firms before & after. TORKLAW dropped from 15 → 10 → 8 attorneys across the two rounds of tightening; all 8 remaining have valid titles ("Attorney", "Partner"). DK Law dropped from 21 → 14 → 11. RMD Law dropped from 8 → 3 → 1 (their bio markup doesn't surface titles in adjacent siblings — known recall loss).
+
+---
+
+## 2026-05-14 — Cluster bubbles vs. apartments.com pattern
+
+Nik called out: don't bundle firms into "+N" cluster bubbles — show them
+individually with a multi-card popup when pins are clustered geographically.
+
+Dropped `leaflet.markercluster` entirely. Each firm gets its own `circleMarker`.
+On click/hover, JS computes pixel-distance neighbors (`PROXIMITY_PX = 26`) at
+the current zoom and renders a single popup containing cards for every nearby
+firm. Each card has the firm name (link to detail), score chip, city, phone.
+
+**Why it matters:** for a sales analyst, "5 firms are clustered here" is less
+useful than "here's a card for each of those 5 firms with names + scores you
+can click directly." The cluster bubble was hiding the information he came to
+the map for.
+
+---
+
 ## 2026-05-14 — Scoring engine: weight keys can lead implementation
 
 `scoring.score()` silently ignores weight keys in `config.yaml` that have no

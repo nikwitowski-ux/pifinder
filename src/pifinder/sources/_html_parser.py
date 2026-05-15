@@ -176,6 +176,52 @@ _NAME_RE = re.compile(
     r"^[A-Z][a-zA-Z'\-]+(?: [A-Z]\.?)?(?: [A-Z][a-zA-Z'\-]+){1,2}$"
 )
 
+# Tokens that are virtually never present in a real human name. If ANY token
+# in a heading-candidate is in this set, we reject the whole candidate —
+# regardless of token count or title-hint presence. This catches the long tail
+# of marketing copy that happens to match `_NAME_RE` (e.g. "Who We Are",
+# "Practice Areas", "Personal Injury Lawyers", "Free Case Evaluation").
+_NAME_STOPWORDS = frozenset({
+    # question / relative pronouns
+    "who", "what", "when", "where", "why", "how", "which",
+    # personal pronouns
+    "we", "us", "our", "ours", "you", "your", "yours",
+    "they", "them", "their", "i", "me", "my", "mine",
+    "he", "his", "she", "her", "hers", "it", "its",
+    # articles + grammar
+    "the", "a", "an", "and", "or", "of", "for", "with", "from", "by",
+    "at", "to", "in", "on", "as",
+    # heading / CTA vocabulary
+    "about", "contact", "practice", "areas", "results", "case", "cases",
+    "testimonials", "reviews", "services", "service", "consultation",
+    "evaluation", "free", "call", "schedule", "get", "started", "today",
+    "now", "help", "choose", "meet", "team", "staff",
+    # firm-name fragments that can collide with name pattern
+    "lawyers", "attorneys", "lawyer", "attorney", "counsel",
+    "firm", "group", "office", "offices",
+    "injury", "accident", "law", "legal", "personal",
+    "auto", "truck", "motorcycle", "bicycle", "pedestrian", "wrongful",
+    "death", "malpractice", "slip", "fall",
+})
+
+
+def _has_stopword(text: str) -> bool:
+    """True if any whitespace-split token is a known non-name word."""
+    return any(t.lower() in _NAME_STOPWORDS for t in text.split())
+
+
+def _has_uppercase_brand_token(text: str) -> bool:
+    """True if a token >2 chars is fully uppercase (TORKLAW, FOO).
+
+    Real human names never use ALL-CAPS for their components. A single capital
+    letter optionally followed by a period (middle initial) is fine.
+    """
+    for t in text.split():
+        clean = t.rstrip(".")
+        if len(clean) > 2 and clean.isalpha() and clean.isupper():
+            return True
+    return False
+
 
 def _attorneys_heuristic(soup: BeautifulSoup, base_url: str) -> list[ParsedAttorney]:
     """Look for cards: a heading that's a proper name plus a nearby title hint.
@@ -192,9 +238,18 @@ def _attorneys_heuristic(soup: BeautifulSoup, base_url: str) -> list[ParsedAttor
             continue
         if not _NAME_RE.match(text):
             continue
+        if _has_stopword(text):
+            # marketing copy or firm-vocabulary headline — never a real name
+            continue
+        if _has_uppercase_brand_token(text):
+            # all-caps tokens (TORKLAW, FOO) are firm/brand markers
+            continue
+        # Every heuristic candidate now requires a nearby role label. Real
+        # attorney cards effectively always have one ("Partner", "Attorney",
+        # "Of Counsel"). Without it we have no positive signal and risk picking
+        # up promo headings like "Christmas Gift Giveaway".
         title = _find_title_near(hdr)
-        tokens = text.split()
-        if len(tokens) < 3 and title is None:
+        if title is None:
             continue
         bio_url = _nearest_link(hdr, base_url)
         key = text.lower()

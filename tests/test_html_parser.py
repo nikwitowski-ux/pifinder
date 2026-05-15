@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+import pytest
+
 from pifinder.sources._html_parser import (
     BLOG_PATHS,
     ATTORNEY_PATHS,
@@ -163,3 +165,109 @@ def test_extract_does_not_crash_on_garbage():
     res = extract_page("not really html <<<", "https://x.example.com/")
     assert res.attorneys == []
     assert res.practice_areas == []
+
+
+# ---- false-positive defenses for the heuristic ----
+
+NON_NAME_HEADINGS = [
+    "Who We Are",
+    "About Our Firm",
+    "About The Firm",
+    "Practice Areas",
+    "Case Results",
+    "Free Case Evaluation",
+    "Schedule A Consultation",
+    "Call Us Today",
+    "Get Started Today",
+    "Why Choose Us",
+    "What We Do",
+    "How We Help",
+    "Our Practice Areas",
+    "Contact Us Today",
+    "Personal Injury Lawyers",
+    "Car Accident Lawyers",
+    "Free Consultation",
+]
+
+
+@pytest.mark.parametrize("heading", NON_NAME_HEADINGS)
+def test_non_name_headings_not_classified_as_attorneys(heading):
+    """No 'attorney' should be extracted from a page whose only headings are
+    marketing copy. These are common patterns on real PI firm sites."""
+    html = f"""
+    <html><body>
+      <section>
+        <h2>{heading}</h2>
+        <p>We help injured clients recover what they deserve.</p>
+      </section>
+    </body></html>
+    """
+    res = extract_page(html, "https://x.example.com/")
+    names = [a.name for a in res.attorneys]
+    assert heading not in names, f"heading {heading!r} was wrongly classified as an attorney"
+    assert names == [], f"unexpected attorneys: {names}"
+
+
+def test_promotional_three_token_headings_without_title_are_rejected():
+    """Real-world TORKLAW leak: '3-token title-cased' isn't enough.
+    Without a title hint sibling, candidates should be rejected."""
+    html = """
+    <html><body>
+      <div><h3>Christmas Gift Giveaway</h3><p>Win a free consultation!</p></div>
+      <div><h3>Holiday Charity Drive</h3><p>Supporting local families.</p></div>
+    </body></html>
+    """
+    res = extract_page(html, "https://x.example.com/")
+    assert res.attorneys == [], f"unexpected: {[a.name for a in res.attorneys]}"
+
+
+def test_uppercase_brand_tokens_in_heading_are_rejected():
+    """Real-world TORKLAW leak: 'TORKLAW Action Center'. Tokens >2 chars
+    in ALL CAPS are firm/brand markers, not human names."""
+    html = """
+    <html><body>
+      <div><h3>TORKLAW Action Center</h3><p>Submit your case online.</p></div>
+      <div><h3>FOO Holdings Group</h3><p>Sister company.</p></div>
+    </body></html>
+    """
+    res = extract_page(html, "https://x.example.com/")
+    assert res.attorneys == []
+
+
+def test_three_token_real_name_with_title_still_passes():
+    """We've tightened the rule. Real names with role labels still work."""
+    html = """
+    <html><body>
+      <div class="card">
+        <h3>Jane A. Doe</h3>
+        <p>Founding Partner</p>
+      </div>
+    </body></html>
+    """
+    res = extract_page(html, "https://x.example.com/")
+    names = [a.name for a in res.attorneys]
+    assert names == ["Jane A. Doe"]
+
+
+def test_marketing_heading_alongside_real_attorney_card():
+    """The page has both — only the real card should yield an attorney."""
+    html = """
+    <html><body>
+      <header><h1>Personal Injury Lawyers</h1></header>
+      <section>
+        <h2>Who We Are</h2>
+        <p>A team of attorneys serving Orange County since 2008.</p>
+      </section>
+      <section class="attorneys">
+        <div class="card">
+          <h3>Jane A. Doe</h3>
+          <p>Founding Partner</p>
+        </div>
+      </section>
+      <h2>Practice Areas</h2>
+      <ul><li>Car accidents</li><li>Slip and fall</li></ul>
+    </body></html>
+    """
+    res = extract_page(html, "https://x.example.com/")
+    names = [a.name for a in res.attorneys]
+    assert names == ["Jane A. Doe"], f"got {names}"

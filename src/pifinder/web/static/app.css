@@ -269,20 +269,90 @@ input[type="range"]::-moz-range-thumb {
   border-bottom: 1px solid var(--signal);
 }
 
-/* marker cluster — replace the default bubbles */
-.marker-cluster {
-  background: transparent !important;
-  border: none;
+/* --------- multi-firm popup (apartments.com-style) --------- */
+.leaflet-popup.multi-popup-wrap .leaflet-popup-content-wrapper { padding: 0; }
+.leaflet-popup.multi-popup-wrap .leaflet-popup-content { margin: 0; width: 290px !important; }
+.multi-popup {
+  background: var(--bg);
+  border-radius: var(--radius);
+  overflow: hidden;
 }
-.marker-cluster div {
+.multi-header {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 10px 14px 8px;
   background: var(--ink);
   color: var(--bg);
+}
+.multi-count {
+  font-family: var(--ff-display);
+  font-weight: 700;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--signal);
+}
+.multi-headline {
+  font-family: var(--ff-mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255,255,255,.75);
+}
+.multi-list {
+  list-style: none;
+  padding: 0; margin: 0;
+  max-height: 280px;
+  overflow-y: auto;
+}
+.multi-row {
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--rule);
+  transition: background 80ms;
+}
+.multi-row:last-child { border-bottom: none; }
+.multi-row:hover { background: var(--bg-2); }
+.multi-name {
+  display: block;
+  font-family: var(--ff-display);
+  font-weight: 600;
+  font-size: 14.5px;
+  line-height: 1.2;
+  color: var(--ink);
+  text-decoration: none;
+  margin-bottom: 4px;
+}
+.multi-row:hover .multi-name { color: var(--signal); }
+.multi-meta {
+  display: flex; align-items: center; gap: 10px;
+  font-family: var(--ff-mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.multi-score {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 22px;
   font-family: var(--ff-mono);
   font-weight: 600;
   font-size: 11px;
-  border-radius: 50%;
-  border: 2px solid var(--bg);
+  padding: 1px 5px;
+  border: 1px solid var(--ink);
+  border-radius: 2px;
+  color: var(--ink);
+  background: var(--bg);
+  letter-spacing: 0;
 }
+.multi-score.hot      { background: var(--hot);  color: var(--bg); border-color: var(--hot); }
+.multi-score.warm     { background: var(--warm); color: var(--bg); border-color: var(--warm); }
+.multi-score.cold     { background: var(--bg-2); color: var(--ink-2); }
+.multi-score.unscored { background: var(--bg-2); color: var(--ink-mute); }
+.multi-city, .multi-phone {
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.multi-phone { color: var(--ink-2); }
 
 /* legend */
 .legend {
@@ -335,6 +405,17 @@ input[type="range"]::-moz-range-thumb {
   font-family: var(--ff-body);
   font-size: 13px;
   color: var(--ink);
+  /* allow horizontal scroll inside the right pane if content overflows */
+  overflow-x: auto;
+}
+/* Firm-name cell: wrap onto a second line instead of clipping invisibly */
+.tabulator .tabulator-cell.cell-name {
+  white-space: normal;
+  line-height: 1.25;
+}
+/* All other cells: ellipsis on truncation so text is always at least hinted */
+.tabulator .tabulator-cell {
+  text-overflow: ellipsis;
 }
 .tabulator .tabulator-header {
   background: var(--bg) !important;
@@ -383,6 +464,60 @@ input[type="range"]::-moz-range-thumb {
 .cell-rating { font-family: var(--ff-mono); }
 .cell-yesno { font-family: var(--ff-mono); font-size: 12px; color: var(--ink-3); }
 .cell-yesno.yes { color: var(--signal); }
+.cell-website { color: var(--ink-2); text-decoration: none; }
+.cell-website:hover { color: var(--signal); }
+.cell-dim { color: var(--ink-mute); }
+
+/* Size tier pill + raw attorney count next to it */
+.cell-size {
+  display: inline-block;
+  font-family: var(--ff-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 7px;
+  border: 1px solid var(--ink);
+  border-radius: 2px;
+  color: var(--ink);
+  background: var(--bg);
+  margin-right: 6px;
+}
+.cell-size.size-solo   { background: var(--bg-2); color: var(--ink-mute); border-color: var(--rule); }
+.cell-size.size-small  { background: var(--bg-2); color: var(--ink-2); }
+.cell-size.size-mid    { background: var(--warm); color: var(--bg); border-color: var(--warm); }
+.cell-size.size-large  { background: var(--signal); color: var(--bg); border-color: var(--signal); }
+.cell-size-att {
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  color: var(--ink-mute);
+}
+.cell-rev-col { color: var(--ink-2); }
+.cell-rev { font-weight: 500; }
+
+/* Frozen columns: subtle right edge so the scroll boundary is legible */
+.tabulator .tabulator-frozen.tabulator-frozen-right,
+.tabulator .tabulator-frozen.tabulator-frozen-left {
+  border-right: 1px solid var(--ink) !important;
+}
+.tabulator .tabulator-header .tabulator-frozen.tabulator-frozen-left {
+  background: var(--bg) !important;
+}
+.tabulator .tabulator-row .tabulator-cell.tabulator-frozen {
+  background: var(--bg) !important;
+}
+.tabulator .tabulator-row.tabulator-selected .tabulator-cell.tabulator-frozen {
+  background: var(--bg-2) !important;
+}
+/* Horizontal scrollbar styling so it doesn't dominate the pane */
+.tabulator .tabulator-tableholder::-webkit-scrollbar { height: 8px; }
+.tabulator .tabulator-tableholder::-webkit-scrollbar-thumb {
+  background: var(--ink-mute);
+  border-radius: 4px;
+}
+.tabulator .tabulator-tableholder::-webkit-scrollbar-track {
+  background: var(--bg-2);
+}
 
 /* --------- firm detail --------- */
 .firm {
