@@ -25,8 +25,9 @@ original heuristic missed:
 
 ## 2026-05-14 — Cluster bubbles vs. apartments.com pattern
 
-Nik called out: don't bundle firms into "+N" cluster bubbles — show them
-individually with a multi-card popup when pins are clustered geographically.
+Design feedback from the user: don't bundle firms into "+N" cluster bubbles —
+show them individually with a multi-card popup when pins are clustered
+geographically.
 
 Dropped `leaflet.markercluster` entirely. Each firm gets its own `circleMarker`.
 On click/hover, JS computes pixel-distance neighbors (`PROXIMITY_PX = 26`) at

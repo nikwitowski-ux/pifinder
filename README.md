@@ -67,7 +67,7 @@ src/pifinder/
     templates/
     static/
 tasks/
-  todo.md           rolling build log (Nik's discipline)
+  todo.md           rolling build log
   lessons.md        gotchas / decisions
 tests/
 data/
