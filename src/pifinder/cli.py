@@ -50,13 +50,20 @@ def discover(
         int | None,
         typer.Option("--enrich-limit", help="Cap auto-enrichment to N firms (websites only)."),
     ] = None,
+    score: Annotated[
+        bool,
+        typer.Option(
+            "--score/--no-score",
+            help="After discovery (and enrichment, if enabled), score every newly discovered firm so the dashboard buckets them.",
+        ),
+    ] = True,
 ) -> None:
     """Find PI firms near LOCATION and persist them to the local DB.
 
     By default, freshly discovered firms with a website are immediately enriched
-    so the dashboard surfaces attorney counts, practice areas, and activity
-    signals on the first refresh. Pass --no-enrich to skip and run `pifinder
-    enrich` manually later.
+    and every newly persisted firm is scored, so the dashboard surfaces attorney
+    counts, practice areas, activity signals, and a hot/warm/cold bucket on the
+    first refresh. Pass --no-enrich and/or --no-score to skip.
     """
     defaults = get_discovery_defaults()
     resolved_query = query or defaults.get("default_query") or "personal injury law firm"
@@ -78,6 +85,18 @@ def discover(
             asyncio.run(_run_enrich(targets))
         else:
             typer.echo("No firms with websites to enrich.")
+
+    if score:
+        firm_ids = [f.id for f in firms if f.id is not None]
+        if firm_ids:
+            settings = get_settings()
+            conn = db_module.connect(settings.db_path)
+            db_module.migrate(conn)
+            # Refetch so enrichment patches (attorney_count, practice page flag,
+            # last_post_at) feed the scorer.
+            rows = [row for fid in firm_ids if (row := db_module.fetch_firm(conn, fid)) is not None]
+            n = _score_rows(conn, rows)
+            typer.echo(f"Auto-scored {n} firm(s).")
 
 
 async def _run_discover(*, location: str, radius_meters: int, query: str) -> list[FirmRecord]:
@@ -249,6 +268,14 @@ def _run_score(*, firm_id: int | None, all_: bool, recompute: bool) -> None:
         typer.echo("nothing to score (use --recompute to rescore everyone)")
         return
 
+    n = _score_rows(conn, rows)
+    typer.echo(f"scored {n} firm(s)")
+
+
+def _score_rows(conn, rows: list[dict[str, Any]]) -> int:
+    """Score the given firm rows; returns the count actually scored."""
+    if not rows:
+        return 0
     weights = get_scoring_weights()
     buckets = get_score_buckets()
     now = datetime.now(timezone.utc)
@@ -272,7 +299,7 @@ def _run_score(*, firm_id: int | None, all_: bool, recompute: bool) -> None:
                 "score firm {} -> {} ({})",
                 breakdown.firm_id, breakdown.score, breakdown.bucket,
             )
-    typer.echo(f"scored {len(rows)} firm(s)")
+    return len(rows)
 
 
 def _row_to_scoring_inputs(row: dict[str, Any], *, now: datetime) -> ScoringInputs:
