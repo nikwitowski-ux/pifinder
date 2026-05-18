@@ -14,6 +14,7 @@ import csv
 import io
 import json
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +29,42 @@ from ..config import get_score_buckets, get_settings
 
 WEB_DIR = Path(__file__).resolve().parent
 TEMPLATES = Jinja2Templates(directory=str(WEB_DIR / "templates"))
+
+
+def _relative_date(value: Any) -> str:
+    """Render an ISO date(time) string as 'N days ago' / 'today' for readability."""
+    if not value:
+        return ""
+    try:
+        if isinstance(value, datetime):
+            dt = value
+        else:
+            dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return str(value)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    delta = datetime.now(timezone.utc) - dt
+    days = delta.days
+    if days < 0:
+        return dt.date().isoformat()  # future-dated; show raw
+    if days == 0:
+        return "today"
+    if days == 1:
+        return "yesterday"
+    if days < 30:
+        return f"{days} days ago"
+    if days < 365:
+        months = days // 30
+        return f"{months} month{'s' if months != 1 else ''} ago"
+    years = days // 365
+    rem_months = (days % 365) // 30
+    if rem_months:
+        return f"{years}y {rem_months}mo ago"
+    return f"{years} year{'s' if years != 1 else ''} ago"
+
+
+TEMPLATES.env.filters["relative_date"] = _relative_date
 
 
 def create_app() -> FastAPI:

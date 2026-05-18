@@ -220,16 +220,28 @@ def _merge_into_result(
 
     # Recent-website-activity signal feeds the scoring engine later.
     if agg.last_post_at is not None:
+        practice_areas = sorted(agg.practice_areas)
+        att_n = len(attorneys)
+        pa_n = len(practice_areas)
+        # Build a one-liner that tells a salesperson *what* the signal means,
+        # not just that it exists. Date already lives on observed_at.
+        bits = [f"active site"]
+        if att_n:
+            bits.append(f"{att_n} attorney{'s' if att_n != 1 else ''} parsed")
+        if pa_n:
+            preview = ", ".join(practice_areas[:3])
+            extra = f" (+{pa_n - 3} more)" if pa_n > 3 else ""
+            bits.append(f"{pa_n} practice area{'s' if pa_n != 1 else ''}: {preview}{extra}")
         result.signals.append(
             Signal(
                 firm_id=firm.id or 0,
                 kind=SignalKind.website,
                 source=SourceName.firm_website,
                 observed_at=agg.last_post_at,
-                summary=f"latest post {agg.last_post_at.date().isoformat()}",
+                summary=" · ".join(bits),
                 payload={
-                    "practice_areas": sorted(agg.practice_areas),
-                    "attorney_count": len(attorneys),
+                    "practice_areas": practice_areas,
+                    "attorney_count": att_n,
                 },
             )
         )

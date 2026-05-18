@@ -55,19 +55,63 @@
   <section class="firm-section">
     <h2 class="section-h">Signals</h2>
     {% if firm.signals %}
-      <table class="signals-table">
-        <thead><tr><th>kind</th><th>source</th><th>observed</th><th>summary</th></tr></thead>
-        <tbody>
-          {% for s in firm.signals %}
-            <tr>
-              <td class="mono">{{ s.kind }}</td>
-              <td class="mono dim">{{ s.source }}</td>
-              <td class="mono dim">{{ s.observed_at[:10] if s.observed_at else '' }}</td>
-              <td>{{ s.summary }}</td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+      <ul class="signal-list">
+        {% for s in firm.signals %}
+          <li class="signal-card signal-{{ s.kind }}">
+            <header class="signal-head">
+              <span class="signal-kind">{{ s.kind|replace('_', ' ') }}</span>
+              <span class="signal-when" title="{{ s.observed_at }}">{{ s.observed_at|relative_date }}</span>
+            </header>
+            <div class="signal-body">
+              {% if s.kind == 'website' %}
+                {% set pas = s.payload.get('practice_areas', []) %}
+                {% set att = s.payload.get('attorney_count') %}
+                <p class="signal-headline">
+                  Site posted content {{ s.observed_at|relative_date }}.
+                </p>
+                <p class="signal-meta">
+                  {% if att is not none %}{{ att }} attorney{{ 's' if att != 1 else '' }} parsed{% endif %}
+                  {% if pas %}{% if att is not none %} · {% endif %}{{ pas|length }} PI practice area{{ 's' if pas|length != 1 else '' }} detected{% endif %}
+                </p>
+                {% if pas %}
+                  <ul class="tag-row">
+                    {% for p in pas[:10] %}<li class="tag">{{ p }}</li>{% endfor %}
+                    {% if pas|length > 10 %}<li class="tag tag-more">+{{ pas|length - 10 }} more</li>{% endif %}
+                  </ul>
+                {% endif %}
+              {% elif s.kind == 'meta_ad' %}
+                <p class="signal-headline">{{ s.summary or 'Running Meta ads.' }}</p>
+                {% if s.payload.get('active_ad_count') is not none %}
+                  <p class="signal-meta">{{ s.payload.active_ad_count }} active ad{{ 's' if s.payload.active_ad_count != 1 else '' }}{% if s.payload.get('regions_targeted') %} · targeting {{ s.payload.regions_targeted|join(', ') }}{% endif %}</p>
+                {% endif %}
+                {% if s.payload.get('ad_themes') %}
+                  <ul class="tag-row">
+                    {% for t in s.payload.ad_themes %}<li class="tag">{{ t }}</li>{% endfor %}
+                  </ul>
+                {% endif %}
+              {% elif s.kind == 'news' %}
+                <p class="signal-headline">{{ s.summary or 'News mention.' }}</p>
+                {% if s.payload.get('url') %}
+                  <p class="signal-meta"><a href="{{ s.payload.url }}" target="_blank" rel="noopener">read source ↗</a></p>
+                {% endif %}
+                {% if s.payload.get('matched_keywords') %}
+                  <ul class="tag-row">
+                    {% for k in s.payload.matched_keywords %}<li class="tag">{{ k }}</li>{% endfor %}
+                  </ul>
+                {% endif %}
+              {% else %}
+                <p class="signal-headline">{{ s.summary or s.kind }}</p>
+                {% if s.payload %}
+                  <details class="raw"><summary>payload</summary>
+                    <pre class="raw-pre">{{ s.payload | tojson(indent=2) }}</pre>
+                  </details>
+                {% endif %}
+              {% endif %}
+            </div>
+            <footer class="signal-foot">via {{ s.source|replace('_', ' ') }}</footer>
+          </li>
+        {% endfor %}
+      </ul>
     {% else %}
       <p class="empty">No signals collected yet.</p>
     {% endif %}

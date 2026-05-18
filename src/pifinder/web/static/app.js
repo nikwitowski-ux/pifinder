@@ -30,7 +30,6 @@
   // popup that lists every firm within `PROXIMITY_PX` pixels — the
   // apartments.com pattern: visible individual pins, multi-card on interaction.
   const PROXIMITY_PX = 26;
-  const HOVER_DELAY_MS = 140;
 
   function initMap() {
     const map = L.map("map", {
@@ -45,6 +44,33 @@
 
     state.map = map;
     state.pinLayer = L.layerGroup().addTo(map);
+
+    // Right-side grid mirrors the map viewport: any pan/zoom refilters the grid.
+    map.on("moveend", refreshGridFromMap);
+  }
+
+  // Firms currently inside the map's viewport. Firms without coords can never
+  // be "on the map", so they drop out.
+  function visibleFirms() {
+    if (!state.map) return state.firms;
+    const bounds = state.map.getBounds();
+    return state.firms.filter((f) => {
+      if (f.latitude == null || f.longitude == null) return false;
+      return bounds.contains([f.latitude, f.longitude]);
+    });
+  }
+
+  function refreshGridFromMap() {
+    if (!state.table) return;
+    const visible = visibleFirms();
+    state.table.setData(visible);
+    const countEl = document.getElementById("grid-count");
+    if (countEl) countEl.textContent = `${visible.length} shown`;
+    // setData wipes selection; re-apply if the selected firm is still in view.
+    if (state.selectedId != null) {
+      const row = state.table.getRow(state.selectedId);
+      if (row) row.select();
+    }
   }
 
   function bucketFor(score) {
@@ -69,21 +95,15 @@
     marker.firm = firm;
 
     marker.on("click", () => {
+      // Toggle: clicking the same pin while its popup is open closes it.
+      if (marker.isPopupOpen()) {
+        marker.closePopup();
+        return;
+      }
       const group = neighborhoodFor(firm);
-      openMultiPopup(marker, group, { sticky: true });
+      openMultiPopup(marker, group);
       // Sync the grid selection to the *clicked* pin (not the whole group).
       selectFirm(firm.id, { from: "map" });
-    });
-    // Quick hover preview — only if the user lingers; doesn't fight a click.
-    marker.on("mouseover", () => {
-      clearTimeout(marker._hoverTimer);
-      marker._hoverTimer = setTimeout(() => {
-        const group = neighborhoodFor(firm);
-        openMultiPopup(marker, group, { sticky: false });
-      }, HOVER_DELAY_MS);
-    });
-    marker.on("mouseout", () => {
-      clearTimeout(marker._hoverTimer);
     });
     return marker;
   }
@@ -111,16 +131,19 @@
     return [head, ...tail];
   }
 
-  function openMultiPopup(anchorMarker, firms, { sticky }) {
+  function openMultiPopup(anchorMarker, firms) {
     const html = firms.length === 1 ? singleCardHtml(firms[0]) : multiCardHtml(firms);
     const popupOpts = {
       maxWidth: 320,
       minWidth: 240,
-      closeButton: sticky,
-      autoClose: sticky,
-      closeOnClick: sticky,
+      closeButton: true,
+      autoClose: true,
+      closeOnClick: true,
       className: firms.length > 1 ? "multi-popup-wrap" : "single-popup-wrap",
     };
+    // Belt-and-suspenders: enforce the single-popup rule even if a caller
+    // re-opens before Leaflet's autoClose has finished its dance.
+    if (state.map) state.map.closePopup();
     anchorMarker.unbindPopup();
     anchorMarker.bindPopup(html, popupOpts).openPopup();
   }
@@ -332,7 +355,7 @@
       // When the fly settles, open the multi-popup so neighbors are surfaced too.
       state.map.once("moveend", () => {
         const group = neighborhoodFor(firm);
-        openMultiPopup(marker, group, { sticky: true });
+        openMultiPopup(marker, group);
       });
     }
     if (opts.from !== "grid" && state.table) {
@@ -360,10 +383,6 @@
     const r = await fetch(`/api/firms?${params}`);
     const data = await r.json();
     state.firms = data.firms;
-    document.getElementById("grid-count").textContent = `${data.count} shown`;
-
-    // Redraw grid
-    state.table.setData(state.firms);
 
     // Redraw map: individual pins, no clustering. Multi-firm popups appear
     // on click/hover when neighbors fall within PROXIMITY_PX.
@@ -377,7 +396,13 @@
       state.markersByFirmId.set(f.id, m);
       pts.push([f.latitude, f.longitude]);
     }
-    if (pts.length > 0) state.map.fitBounds(pts, { padding: [30, 30], maxZoom: 12 });
+    if (pts.length > 0) {
+      // fitBounds will trigger moveend → refreshGridFromMap populates the grid.
+      state.map.fitBounds(pts, { padding: [30, 30], maxZoom: 12 });
+    } else {
+      // No pins means no moveend will fire — refresh the (empty) grid directly.
+      refreshGridFromMap();
+    }
   }
 
   // ---- wiring ----

@@ -39,8 +39,25 @@ def discover(
     radius: Annotated[float, typer.Option("--radius", "-r", help="miles")] = 25.0,
     query: Annotated[str | None, typer.Option("--query", "-q")] = None,
     output: Annotated[Path | None, typer.Option("--output", "-o", help="CSV path")] = None,
+    enrich: Annotated[
+        bool,
+        typer.Option(
+            "--enrich/--no-enrich",
+            help="After discovery, auto-scrape each firm's website for attorneys, practice areas, and recent activity.",
+        ),
+    ] = True,
+    enrich_limit: Annotated[
+        int | None,
+        typer.Option("--enrich-limit", help="Cap auto-enrichment to N firms (websites only)."),
+    ] = None,
 ) -> None:
-    """Find PI firms near LOCATION and persist them to the local DB."""
+    """Find PI firms near LOCATION and persist them to the local DB.
+
+    By default, freshly discovered firms with a website are immediately enriched
+    so the dashboard surfaces attorney counts, practice areas, and activity
+    signals on the first refresh. Pass --no-enrich to skip and run `pifinder
+    enrich` manually later.
+    """
     defaults = get_discovery_defaults()
     resolved_query = query or defaults.get("default_query") or "personal injury law firm"
     radius_meters = int(radius * 1609.344)
@@ -51,6 +68,16 @@ def discover(
     if output:
         _write_csv(firms, output)
         typer.echo(f"CSV written to {output}")
+
+    if enrich:
+        targets = [f for f in firms if f.website and f.id is not None]
+        if enrich_limit is not None:
+            targets = targets[:enrich_limit]
+        if targets:
+            typer.echo(f"Auto-enriching {len(targets)} firm(s) with websites...")
+            asyncio.run(_run_enrich(targets))
+        else:
+            typer.echo("No firms with websites to enrich.")
 
 
 async def _run_discover(*, location: str, radius_meters: int, query: str) -> list[FirmRecord]:
@@ -68,9 +95,10 @@ async def _run_discover(*, location: str, radius_meters: int, query: str) -> lis
         raise typer.Exit(code=2)
 
     with db_module.transaction(conn):
-        inserted_ids: list[int] = []
         for firm in firms:
-            inserted_ids.append(db_module.upsert_firm(conn, firm))
+            # Mutate the in-memory record with the persisted id so downstream
+            # auto-enrichment can address rows without a refetch.
+            firm.id = db_module.upsert_firm(conn, firm)
 
     db_module.finish_run(conn, run_id, firm_count=len(firms))
     logger.info("run #{} stored {} firms", run_id, len(firms))
@@ -103,18 +131,18 @@ def enrich(
         if limit:
             firms_rows = firms_rows[:limit]
 
-    typer.echo(f"Enriching {len(firms_rows)} firm(s)...")
-    asyncio.run(_run_enrich(firms_rows))
+    firms = [_row_to_firm(r) for r in firms_rows]
+    typer.echo(f"Enriching {len(firms)} firm(s)...")
+    asyncio.run(_run_enrich(firms))
 
 
-async def _run_enrich(firm_rows: list[dict[str, Any]]) -> None:
+async def _run_enrich(firms: list[FirmRecord]) -> None:
     settings = get_settings()
     conn = db_module.connect(settings.db_path)
     db_module.migrate(conn)
 
     async with FirmWebsiteScraper() as scraper:
-        for row in firm_rows:
-            firm = _row_to_firm(row)
+        for firm in firms:
             if not firm.website:
                 logger.info("skip firm {}: no website", firm.id)
                 continue
